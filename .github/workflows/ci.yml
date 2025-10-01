@@ -37,13 +37,13 @@ jobs:
         run: pytest --maxfail=1 --disable-warnings -q
 
       - name: Tear down old Docker containers
-        run: docker-compose down -v --remove-orphans || true
+        run: docker compose down -v --remove-orphans || true
 
       - name: Build Docker Compose
-        run: docker-compose build
+        run: docker compose build
 
       - name: Start Docker Compose
-        run: docker-compose up -d
+        run: docker compose up -d
 
       - name: Wait for app to start
         run: sleep 5
@@ -52,5 +52,5 @@ jobs:
         run: pytest tests/ --maxfail=1 --disable-warnings -q
 
       - name: Tear down Docker Compose
-        run: docker-compose down -v --remove-orphans
+        run: docker compose down -v --remove-orphans
 
