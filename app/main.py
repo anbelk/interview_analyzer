@@ -1,6 +1,8 @@
-from fastapi import BackgroundTasks
+from fastapi import FastAPI
 from app.services.transcription import transcribe_video
 from pathlib import Path
+
+app = FastAPI(title="Interview Analyzer")
 
 @app.post("/process/{filename}")
 async def process_video(filename: str, background_tasks: BackgroundTasks):
