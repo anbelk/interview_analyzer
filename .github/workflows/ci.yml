@@ -40,8 +40,8 @@ jobs:
 
       - name: Set up Docker Compose
         run: |
-          docker-compose build
-          docker-compose up -d
+          docker compose build
+          docker compose up -d
 
       - name: Wait for app to start
         run: |
@@ -53,5 +53,5 @@ jobs:
           pytest tests/ --maxfail=1 --disable-warnings -q
 
       - name: Tear down Docker Compose
-        run: docker-compose down
+        run: docker compose down
 
