@@ -1,4 +1,4 @@
-import io
+from fastapi.testclient import TestClient
 from app.main import app, UPLOAD_DIR
 
 client = TestClient(app)
