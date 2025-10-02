@@ -1,9 +1,13 @@
-from fastapi import FastAPI, BackgroundTasks
-from app.services.transcription import transcribe_video
-from pathlib import Path
-from app.services.analyzer import analyze_transcript
+import asyncio
 import json
+import shutil
+from pathlib import Path
+
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
+
+from app.services.transcription import transcribe_video
+from app.services.analyzer import analyze_transcript
 from app.services.exporter import export_to_xlsx
 
 UPLOAD_DIR = Path("uploads")
@@ -56,3 +60,29 @@ async def export_analysis(filename: str):
     export_to_xlsx(data, xlsx_file)
 
     return FileResponse(path=xlsx_file, filename=f"{filename}.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+@app.post("/full_pipeline")
+async def full_pipeline(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith((".mp4", ".avi", ".mov", ".mkv")):
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    file_path = UPLOAD_DIR / file.filename
+    with file_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    transcript = await transcribe_video(file_path)
+    transcript_file = file_path.with_suffix(".txt")
+    transcript_file.write_text(transcript, encoding="utf-8")
+
+    analysis = analyze_transcript(transcript_file)
+    json_file = file_path.with_suffix(".json")
+    json_file.write_text(json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    xlsx_file = file_path.with_suffix(".xlsx")
+    export_to_xlsx(analysis, xlsx_file)
+
+    return FileResponse(
+        path=xlsx_file,
+        filename=f"{file.filename}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )

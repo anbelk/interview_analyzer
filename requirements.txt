@@ -5,3 +5,4 @@ httpx
 ruff
 openai
 openpyxl
+python-multipart
