@@ -1,9 +1,10 @@
 import os
 import sys
-from fastapi.testclient import TestClient
-from app.main import app, UPLOAD_DIR
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from fastapi.testclient import TestClient
+from app.main import app, UPLOAD_DIR
 
 client = TestClient(app)
 
