@@ -3,6 +3,8 @@ from app.services.transcription import transcribe_video
 from pathlib import Path
 from app.services.analyzer import analyze_transcript
 import json
+from fastapi.responses import FileResponse
+from app.services.exporter import export_to_xlsx
 
 UPLOAD_DIR = Path("uploads")
 
@@ -42,3 +44,15 @@ async def analyze_video(filename: str):
     output_file.write_text(json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"message": f"Analysis saved to {output_file}", "result": analysis}
+
+@app.get("/export/{filename}")
+async def export_analysis(filename: str):
+    json_file = UPLOAD_DIR / f"{filename}.json"
+    if not json_file.exists():
+        return {"error": "JSON analysis not found. Please run /analyze first."}
+
+    xlsx_file = UPLOAD_DIR / f"{filename}.xlsx"
+    data = json.loads(json_file.read_text(encoding="utf-8"))
+    export_to_xlsx(data, xlsx_file)
+
+    return FileResponse(path=xlsx_file, filename=f"{filename}.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
