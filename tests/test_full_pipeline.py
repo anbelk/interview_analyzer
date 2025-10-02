@@ -1,8 +1,6 @@
 import io
-from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app, UPLOAD_DIR
-import json
 
 client = TestClient(app)
 
