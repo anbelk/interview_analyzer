@@ -26,10 +26,11 @@ def test_analyze_video(monkeypatch, tmp_path):
             ]
         }
 
-    monkeypatch.setattr("app.services.analyzer.analyze_transcript", fake_analyze_transcript)
+    monkeypatch.setattr("app.main.analyze_transcript", fake_analyze_transcript)
 
     response = client.post("/analyze/fake")
     assert response.status_code == 200
+    print(response.json())
     result = response.json()["result"]
     assert result["company"] == "TestCorp"
     assert result["position"] == "Data Scientist"
