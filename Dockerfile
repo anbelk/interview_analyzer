@@ -8,6 +8,7 @@ RUN pip install --upgrade pip && \
 
 COPY app/ ./app
 COPY tests/ ./tests
+COPY uploads/ ./uploads
 
 EXPOSE 8000
 
