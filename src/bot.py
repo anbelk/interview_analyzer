@@ -1,15 +1,15 @@
 from dotenv import load_dotenv
 import asyncio
 from pathlib import Path
-from io import BytesIO
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import FSInputFile
 from loguru import logger
 from openai import AsyncOpenAI
-from bot.utils import generate_xlsx_from_analysis
+from src.utils import generate_xlsx_from_analysis
 import json
 import os
+import subprocess
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -34,9 +34,14 @@ PROMPT_TEMPLATE = """
 """
 
 DOWNLOADS_DIR = Path("downloads")
+DOWNLOADS_DIR.mkdir(exist_ok=True)
+
+REPORTS_DIR = Path("reports")
+REPORTS_DIR.mkdir(exist_ok=True)
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
+    logger.info("Получена команда /start от пользователя: {}", message.from_user.id)
     await message.answer("Привет! Пришли видео, и я верну XLSX с анализом.")
 
 @dp.message(F.video)
@@ -48,28 +53,50 @@ async def process_video(message: types.Message):
     await bot.download(file=message.video.file_id, destination=video_path)
     logger.info("[Video {}] Сохранено на диск: {}", video_id, video_path)
 
-    try:
-        transcripts = []
-        chunk_size = 24 * 1024 * 1024
+    audio_path = DOWNLOADS_DIR / f"{video_id}.mp3"
 
-        with open(video_path, "rb") as f:
-            chunk_index = 1
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                chunk_bio = BytesIO(chunk)
+    try:
+        # Конвертация видео в mp3
+        subprocess.run([
+            "ffmpeg",
+            "-i", str(video_path),
+            "-vn",
+            "-acodec", "mp3",
+            "-ar", "16000",
+            "-ac", "1",
+            "-y", str(audio_path)
+        ], check=True)
+        logger.info("[Video {}] Конвертация в MP3 завершена: {}", video_id, audio_path)
+
+        # Разбиваем на чанки по 10 минут (в downloads)
+        chunk_files = []
+        subprocess.run([
+            "ffmpeg",
+            "-i", str(audio_path),
+            "-f", "segment",
+            "-segment_time", "600",
+            "-c", "copy",
+            str(DOWNLOADS_DIR / f"{video_id}_chunk_%03d.mp3")
+        ], check=True)
+
+        chunk_files = sorted(DOWNLOADS_DIR.glob(f"{video_id}_chunk_*.mp3"))
+        logger.info("[Video {}] Аудио разбито на {} чанков", video_id, len(chunk_files))
+
+        # Транскрибируем каждый чанк
+        transcripts = []
+        for chunk_file in chunk_files:
+            logger.info("[Video {}] Транскрибируем {}", video_id, chunk_file)
+            with open(chunk_file, "rb") as f:
                 resp = await client.audio.transcriptions.create(
-                    file=chunk_bio,
+                    file=f,
                     model="gpt-4o-transcribe"
                 )
-                transcripts.append(resp.text)
-                logger.info("[Video {}] Чанк {} транскрибирован", video_id, chunk_index)
-                chunk_index += 1
+            transcripts.append(resp.text)
 
         full_transcript = "\n".join(transcripts)
         logger.info("[Video {}] Все чанки транскрибированы", video_id)
 
+        # LLM-анализ
         prompt = PROMPT_TEMPLATE + f"\nТранскрипт:\n{full_transcript}"
         analysis_resp = await client.chat.completions.create(
             model="gpt-4.1",
@@ -81,11 +108,13 @@ async def process_video(message: types.Message):
         analysis = json.loads(analysis_text)
         logger.info("[Video {}] LLM-анализ завершен", video_id)
 
-        xlsx_bytes = generate_xlsx_from_analysis(analysis)
-        xlsx_bytes.seek(0)
-        await message.answer_document(
-            FSInputFile(xlsx_bytes, filename=f"report_{video_id}.xlsx")
-        )
+        # Генерация XLSX в папку reports
+        xlsx_path = REPORTS_DIR / f"report_{video_id}.xlsx"
+        with open(xlsx_path, "wb") as f:
+            f.write(generate_xlsx_from_analysis(analysis).getbuffer())
+
+        # Отправка XLSX
+        await message.answer_document(FSInputFile(xlsx_path))
         logger.info("[Video {}] Отправка XLSX завершена", video_id)
 
     except Exception as e:
@@ -93,7 +122,12 @@ async def process_video(message: types.Message):
         await message.answer(f"Произошла ошибка при обработке видео {video_id}: {e}")
 
     finally:
+        # Очистка всех файлов после отправки
         video_path.unlink(missing_ok=True)
+        audio_path.unlink(missing_ok=True)
+        xlsx_path.unlink(missing_ok=True)
+        for f in DOWNLOADS_DIR.glob(f"{video_id}_chunk_*.mp3"):
+            f.unlink(missing_ok=True)
 
 async def main():
     logger.info("Бот запускается...")
