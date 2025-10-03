@@ -1,8 +1,6 @@
-fastapi
-uvicorn
-pytest
-httpx
-ruff
+aiogram==3.*
+loguru
 openai
 openpyxl
-python-multipart
+python-dotenv
+pytest

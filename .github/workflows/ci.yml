@@ -2,58 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
-
-    services:
-      docker:
-        image: docker:24.0.5-dind
-        options: --privileged
-        
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
 
-      - name: Install dependencies for local tests
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest ruff httpx
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest ruff
 
-      - name: Lint with ruff
-        run: ruff check .
+    - name: Lint code
+      run: ruff check .
 
-      - name: Run unit tests
-        run: pytest --maxfail=1 --disable-warnings -q
-
-      - name: Tear down old Docker containers
-        run: docker compose down -v --remove-orphans || true
-
-      - name: Build Docker Compose
-        run: docker compose build
-
-      - name: Start Docker Compose
-        run: docker compose up -d
-
-      - name: Wait for app to start
-        run: sleep 5
-
-      - name: Run integration tests against Docker
-        run: pytest tests/ --maxfail=1 --disable-warnings -q
-
-      - name: Tear down Docker Compose
-        run: docker compose down -v --remove-orphans
-
+    - name: Run tests
+      run: pytest --maxfail=1 --disable-warnings -q
