@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import FSInputFile
 from loguru import logger
 from openai import AsyncOpenAI
-from utils import generate_xlsx_from_analysis
+from bot.utils import generate_xlsx_from_analysis
 import json
 import os
 
@@ -19,9 +19,6 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
-DOWNLOADS_DIR = Path("downloads")
-DOWNLOADS_DIR.mkdir(exist_ok=True)
 
 PROMPT_TEMPLATE = """
 Ты получаешь транскрипт технического интервью программиста.
@@ -35,6 +32,8 @@ PROMPT_TEMPLATE = """
     ]
 }
 """
+
+DOWNLOADS_DIR = Path("downloads")
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
