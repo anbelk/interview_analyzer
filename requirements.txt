@@ -1,7 +1,8 @@
 aiogram==3.*
-loguru
+telethon
 openai
 openpyxl
 python-dotenv
 pytest
 pytest-asyncio
+loguru

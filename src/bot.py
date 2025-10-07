@@ -1,9 +1,9 @@
 import asyncio
 from aiogram import Bot, Dispatcher
-from loguru import logger
 from src.config import BOT_TOKEN
 from src.config import LOG_FILE
 from src.handlers import register_handlers
+from loguru import logger
 
 logger.remove()
 
