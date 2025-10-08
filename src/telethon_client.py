@@ -9,17 +9,23 @@ client = TelegramClient("admin_session", TG_API_ID, TG_API_HASH)
 
 @client.on(events.NewMessage)
 async def handle_forwarded_video(event):
-    if event.sender_id != BOT_ID:
+    # пропускаем, если нет видео
+    if not event.video:
         return
 
-    if event.video:
-        video_id = event.video.file_unique_id
-        video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
-        
-        logger.info("КАЧАЮ")
-        await client.download_media(event.video, file=video_path)
-        logger.info("СКАЧАЛОСЬ НА СЕРВЕР")
-    
+    # проверяем, что это пересланное сообщение от нужного бота
+    bot_user_id = getattr(getattr(event.fwd_from, 'from_id', None), 'user_id', None)
+    if bot_user_id != BOT_ID:
+        return
+
+    video_id = event.video.file_unique_id
+    video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
+
+    logger.info("КАЧАЮ видео {video_id}...", video_id=video_id)
+    await client.download_media(event.video, file=video_path)
+    logger.info("СКАЧАЛОСЬ НА СЕРВЕР {video_id}", video_id=video_id)
+
+    # сигналим обработчику, что видео загружено
     if video_id in video_events:
         video_events[video_id].set()
         del video_events[video_id]
