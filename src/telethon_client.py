@@ -10,6 +10,8 @@ client = TelegramClient("admin_session", TG_API_ID, TG_API_HASH)
 
 @client.on(events.NewMessage)
 async def handle_forwarded_video(event):
+    print("sender_id:", event.sender_id)
+    print("is forwarded:", event.fwd_from)
     # проверяем, есть ли медиа
     if not event.media:
         return
