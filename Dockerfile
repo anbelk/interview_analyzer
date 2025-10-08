@@ -14,4 +14,4 @@ COPY src/ ./src
 
 ENV PYTHONPATH=/app
 
-CMD python src/bot.py & python src/telethon_client.py
+CMD ["python", "src/main.py"]
