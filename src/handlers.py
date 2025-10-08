@@ -8,8 +8,8 @@ from src.services.transcription import convert_video_to_mp3, split_audio_to_chun
 from src.services.analysis import analyze_transcript
 from src.services.reports import save_report
 from src.services.cleanup import cleanup_files
-from loguru import logger
 from shared_events import video_events
+from loguru import logger
 
 async def process_large_video(video_path: Path, user: types.User):
     video_id = video_path.stem
@@ -89,7 +89,8 @@ async def register_handlers(dp):
         logger.info("{video_id}: загрузка...", video_id=video_id)
         event = asyncio.Event()
         video_events[video_id] = event
+        logger.info("ЖДУ ПОКА НЕ СКАЧАЕТСЯ")
         await event.wait()
         logger.info("{video_id}: завершена загрузка", video_id=video_id)
-        
+
         await process_large_video(video_path, user)
