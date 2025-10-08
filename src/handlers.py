@@ -9,13 +9,7 @@ from src.services.analysis import analyze_transcript
 from src.services.reports import save_report
 from src.services.cleanup import cleanup_files
 from loguru import logger
-
-async def wait_for_video(video_path: Path, timeout: int = 600):
-    for _ in range(timeout):
-        if video_path.exists():
-            return True
-        await asyncio.sleep(1)
-    return False
+from shared_events import video_events
 
 async def process_large_video(video_path: Path, user: types.User):
     video_id = video_path.stem
@@ -93,15 +87,9 @@ async def register_handlers(dp):
         await message.forward(chat_id=ADMIN_ID)
 
         logger.info("{video_id}: загрузка...", video_id=video_id)
-        if await wait_for_video(video_path):
-            logger.info("{video_id}: завершена загрузка", video_id=video_id)
-            await process_large_video(video_path, user)
-        else:
-            await message.answer("Не удалось скачать видео")
-            logger.warning(
-                "Не удалось скачать видео {video_id} от пользователя {user_id} ({name}, @{username})",
-                video_id=video_id,
-                user_id=user.id,
-                name=user.full_name,
-                username=user.username or "без username"
-            )
+        event = asyncio.Event()
+        video_events[video_id] = event
+        await event.wait()
+        logger.info("{video_id}: завершена загрузка", video_id=video_id)
+        
+        await process_large_video(video_path, user)
