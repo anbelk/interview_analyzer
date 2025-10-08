@@ -1,5 +1,6 @@
 import asyncio
 from telethon import TelegramClient, events
+from telethon.tl.types import MessageMediaDocument, DocumentAttributeVideo
 from src.config import BOT_TOKEN, BOT_ID, TG_API_ID, TG_API_HASH
 from src.config import DOWNLOADS_DIR
 from shared_events import video_events
@@ -9,8 +10,8 @@ client = TelegramClient("admin_session", TG_API_ID, TG_API_HASH)
 
 @client.on(events.NewMessage)
 async def handle_forwarded_video(event):
-    # пропускаем, если нет видео
-    if not event.video:
+    # проверяем, есть ли медиа
+    if not event.media:
         return
 
     # проверяем, что это пересланное сообщение от нужного бота
@@ -18,11 +19,15 @@ async def handle_forwarded_video(event):
     if bot_user_id != BOT_ID:
         return
 
-    video_id = event.video.file_unique_id
+    # проверяем, что это видео
+    if not (hasattr(event.media, 'document') and any(isinstance(attr, DocumentAttributeVideo) for attr in event.media.document.attributes)):
+        return
+
+    video_id = event.media.document.file_unique_id
     video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
 
     logger.info("КАЧАЮ видео {video_id}...", video_id=video_id)
-    await client.download_media(event.video, file=video_path)
+    await client.download_media(event.media, file=video_path)
     logger.info("СКАЧАЛОСЬ НА СЕРВЕР {video_id}", video_id=video_id)
 
     # сигналим обработчику, что видео загружено
