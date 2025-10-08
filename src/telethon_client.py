@@ -16,6 +16,7 @@ async def handle_forwarded_video(event):
         video_id = event.video.file_unique_id
         video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
         
+        logger.info("КАЧАЮ")
         await client.download_media(event.video, file=video_path)
         logger.info("СКАЧАЛОСЬ НА СЕРВЕР")
     
