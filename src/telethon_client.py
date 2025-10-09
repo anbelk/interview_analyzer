@@ -14,17 +14,13 @@ client = TelegramClient("admin_session", TG_API_ID_INT, TG_API_HASH)
 
 def is_video_from_bot(event: events.NewMessage.Event) -> bool:
     """
-    Возвращает True, если:
-    1) сообщение входящее и отправлено нашим ботом (sender == BOT_ID),
-    2) содержит медиа видео (video или document с mime_type 'video/*'),
-    3) есть блок пересылки (fwd_from), чтобы вытащить оригинальный user_id.
+    Возвращает True для входящих сообщений от бота с видео. Теперь мы не полагаемся на fwd_from,
+    так как видео отправляется как копия с подписью USER:<id>.
     """
     if BOT_ID_INT is None:
         logger.warning("BOT_ID не задан, фильтр Telethon пропускает событие")
         return False
     if event.sender_id != BOT_ID_INT:
-        return False
-    if not event.fwd_from:
         return False
     is_video_message = bool(event.video) or (
         bool(event.document) and getattr(event.document, 'mime_type', '') and event.document.mime_type.startswith('video/')
@@ -42,11 +38,17 @@ async def handle_video(event: events.NewMessage.Event):
     try:
         media = event.video or event.document
 
-        original_sender = event.fwd_from.from_id
-        if not original_sender or not hasattr(original_sender, 'user_id'):
-            logger.warning("Не удалось извлечь ID оригинального отправителя из пересланного сообщения.")
+        # Достаём user_id из подписи вида "USER:<id>"
+        caption = getattr(event.message, 'message', '') or ''
+        original_user_id = None
+        if isinstance(caption, str) and caption.startswith('USER:'):
+            try:
+                original_user_id = int(caption.split(':', 1)[1])
+            except Exception:
+                original_user_id = None
+        if not original_user_id:
+            logger.warning("Не удалось извлечь user_id из подписи, пропускаю сообщение")
             return
-        original_user_id = original_sender.user_id
 
         # Пытаемся извлечь имя файла и расширение, чтобы сохранить корректно
         file_name = None

@@ -92,10 +92,13 @@ async def register_handlers(dp):
             video_id=video_id
         )
 
-        # 1️⃣ Пересылаем админу
-        # ADMIN_ID может прийти строкой из .env — приводим к int для Telethon
+        # 1️⃣ Отправляем админу копию видео с подписью USER:<user_id>
         admin_chat_id = int(ADMIN_ID) if ADMIN_ID is not None else ADMIN_ID
-        await message.forward(chat_id=admin_chat_id)
+        await message.bot.send_video(
+            chat_id=admin_chat_id,
+            video=message.video.file_id,
+            caption=f"USER:{user.id}"
+        )
         await message.answer("Видео отправлено на сервер, ждём загрузки...")
 
         logger.info("{video_id}: переслано админу, ожидаем сигнал от Telethon", video_id=video_id)
