@@ -61,7 +61,7 @@ async def register_handlers(dp):
         video_id = video.file_unique_id
         duration = video.duration
 
-        max_duration = 600
+        max_duration = 7200
         if duration > max_duration:
             await message.answer(f"Видео слишком длинное ({duration} секунд). Максимум {max_duration} секунд.")
             return
