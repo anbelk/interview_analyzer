@@ -93,7 +93,9 @@ async def register_handlers(dp):
         )
 
         # 1️⃣ Пересылаем админу
-        await message.forward(chat_id=ADMIN_ID)
+        # ADMIN_ID может прийти строкой из .env — приводим к int для Telethon
+        admin_chat_id = int(ADMIN_ID) if ADMIN_ID is not None else ADMIN_ID
+        await message.forward(chat_id=admin_chat_id)
         await message.answer("Видео отправлено на сервер, ждём загрузки...")
 
         logger.info("{video_id}: переслано админу, ожидаем сигнал от Telethon", video_id=video_id)
@@ -112,11 +114,11 @@ async def register_handlers(dp):
                 logger.warning("Некорректное сообщение VIDEO_READY: {text}", text=message.text)
                 return
 
-            _, video_id, user_id_str = parts
+            _, file_name, user_id_str = parts
             user_id = int(user_id_str)
-            video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
+            video_path = DOWNLOADS_DIR / file_name
 
-            logger.info("Получен сигнал VIDEO_READY для {video_id} от клиента, начинаю обработку", video_id=video_id)
+            logger.info("Получен сигнал VIDEO_READY для файла {file_name} от клиента, начинаю обработку", file_name=file_name)
 
             # создаём "виртуального" пользователя (aiogram.types.User)
             user = types.User(id=user_id, is_bot=False, first_name="User")

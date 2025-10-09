@@ -1,77 +1,99 @@
 import asyncio
 from pathlib import Path
 from telethon import TelegramClient, events
+from telethon.tl.types import PeerUser
 from src.config import BOT_ID, TG_API_ID, TG_API_HASH, DOWNLOADS_DIR
 from loguru import logger
 
+# Безопасное приведение типов для ID, полученных из .env
+BOT_ID_INT = int(BOT_ID) if BOT_ID is not None else None
+TG_API_ID_INT = int(TG_API_ID) if TG_API_ID is not None else None
+
 # Инициализируем клиент (как и раньше, от лица вашего аккаунта)
-client = TelegramClient("admin_session", TG_API_ID, TG_API_HASH)
+client = TelegramClient("admin_session", TG_API_ID_INT, TG_API_HASH)
 
 def is_video_from_bot(event: events.NewMessage.Event) -> bool:
     """
-    Функция-фильтр. Возвращает True, если:
-    1. Сообщение является входящим.
-    2. Оно переслано от нашего бота (с ID == BOT_ID).
-    3. Оно содержит видео (любого типа: сжатое или как документ).
+    Возвращает True, если:
+    1) сообщение входящее и отправлено нашим ботом (sender == BOT_ID),
+    2) содержит медиа видео (video или document с mime_type 'video/*'),
+    3) есть блок пересылки (fwd_from), чтобы вытащить оригинальный user_id.
     """
-    # 1. Проверяем, что сообщение переслано
+    if BOT_ID_INT is None:
+        logger.warning("BOT_ID не задан, фильтр Telethon пропускает событие")
+        return False
+    if event.sender_id != BOT_ID_INT:
+        return False
     if not event.fwd_from:
         return False
-    
-    # 2. Проверяем, что оно переслано от нашего бота
-    # getattr нужен для безопасного доступа, на случай если from_id будет None
-    forwarder_id = getattr(event.fwd_from.from_id, 'user_id', None)
-    if forwarder_id != BOT_ID:
-        return False
-        
-    # 3. Проверяем, является ли медиафайл видео
-    is_video_message = event.video or (event.document and event.document.mime_type.startswith('video/'))
-    
+    is_video_message = bool(event.video) or (
+        bool(event.document) and getattr(event.document, 'mime_type', '') and event.document.mime_type.startswith('video/')
+    )
     return is_video_message
 
 # Используем наш мощный фильтр в декораторе
 @client.on(events.NewMessage(incoming=True, func=is_video_from_bot))
 async def handle_video(event: events.NewMessage.Event):
     """
-    Этот хэндлер сработает ТОЛЬКО на пересланные от бота видео.
+    Срабатывает на входящее видео, которое переслал наш бот админу.
+    Скачивает файл и отправляет боту сигнал вида:
+    VIDEO_READY:<basename>:<original_user_id>
     """
     try:
-        # Получаем медиа-объект и его уникальный ID
         media = event.video or event.document
-        video_unique_id = media.file_unique_id
-        
-        # САМОЕ ГЛАВНОЕ: получаем ID оригинального пользователя из заголовка пересылки
+
         original_sender = event.fwd_from.from_id
         if not original_sender or not hasattr(original_sender, 'user_id'):
-             logger.warning("Не удалось извлечь ID оригинального отправителя из пересланного сообщения.")
-             return
-        
+            logger.warning("Не удалось извлечь ID оригинального отправителя из пересланного сообщения.")
+            return
         original_user_id = original_sender.user_id
-        
-        logger.info(
-            "Обнаружено видео {video_id} от пользователя {user_id}. Начинаю скачивание.",
-            video_id=video_unique_id,
-            user_id=original_user_id
-        )
 
-        # Определяем расширение файла. По умолчанию .mp4
+        # Пытаемся извлечь имя файла и расширение, чтобы сохранить корректно
+        file_name = None
         file_ext = ".mp4"
         if event.document:
-            # Пытаемся получить оригинальное имя файла для правильного расширения
-            for attr in event.document.attributes:
-                if hasattr(attr, 'file_name'):
-                    file_ext = Path(attr.file_name).suffix
-                    break
-        
-        video_path = DOWNLOADS_DIR / f"{video_unique_id}{file_ext}"
+            try:
+                for attr in event.document.attributes:
+                    if hasattr(attr, 'file_name') and attr.file_name:
+                        file_name = attr.file_name
+                        break
+            except Exception:
+                file_name = None
+            if getattr(event.document, 'mime_type', '') and not file_name:
+                if not event.document.mime_type.startswith('video/'):
+                    logger.warning("Получен document без video mime_type, пропускаю")
+                    return
+        if file_name:
+            file_ext = Path(file_name).suffix or ".mp4"
 
-        # Качаем видео
-        await client.download_media(event.message, file=video_path)
-        logger.success("Видео {video_id} успешно скачано в {path}", video_id=video_unique_id, path=video_path)
+        # Скачиваем в директорию загрузок; Telethon вернёт фактический путь
+        downloaded_path_str = await client.download_media(event.message, file=str(DOWNLOADS_DIR))
+        if not downloaded_path_str:
+            logger.warning("download_media вернул пустой путь, файл не скачан")
+            return
+        downloaded_path = Path(downloaded_path_str)
 
-        # Отправляем боту сигнал, что видео готово к обработке
-        signal_message = f"VIDEO_READY:{video_unique_id}:{original_user_id}"
-        await client.send_message(BOT_ID, signal_message)
+        # Если расширение отсутствует, приведём к .mp4
+        if downloaded_path.suffix == "":
+            target_path = downloaded_path.with_suffix(file_ext)
+            try:
+                downloaded_path.rename(target_path)
+                downloaded_path = target_path
+            except Exception:
+                logger.exception("Не удалось переименовать файл без расширения")
+
+        logger.success(
+            "Видео успешно скачано: {path}. Отправляю сигнал боту.",
+            path=downloaded_path
+        )
+
+        basename = downloaded_path.name
+        signal_message = f"VIDEO_READY:{basename}:{original_user_id}"
+        try:
+            await client.send_message(BOT_ID_INT, signal_message)
+        except Exception:
+            # Если по числовому ID нельзя резолвить сущность, шлём явному пиру
+            await client.send_message(PeerUser(BOT_ID_INT), signal_message)
         logger.info("Отправлен сигнал боту: {signal}", signal=signal_message)
 
     except Exception:
@@ -81,17 +103,10 @@ async def handle_video(event: events.NewMessage.Event):
 async def main():
     # При запуске, вы можете отправить боту любое сообщение,
     # чтобы получить его ID, если вы его не знаете
-    # await client.start()
+    await client.start()
     # me = await client.get_me()
     # print(f"Telethon клиент запущен от имени: {me.first_name} (ID: {me.id})")
     # print(f"Бот, с которым мы работаем, должен иметь ID: {BOT_ID}")
     
     print("Telethon клиент запущен. Ожидание видео от бота...")
     await client.run_until_disconnected()
-
-if __name__ == "__main__":
-    with client:
-        # Для запуска используем client.loop.run_until_complete(main())
-        # или просто client.run_until_disconnected() если start() вызывается внутри main
-        client.start()
-        client.run_until_disconnected()
