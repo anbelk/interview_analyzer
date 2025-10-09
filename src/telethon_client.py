@@ -12,14 +12,17 @@ client = TelegramClient("admin_session", TG_API_ID, TG_API_HASH)
 def is_video_from_bot(event: events.NewMessage.Event) -> bool:
     if event.sender_id != BOT_ID:
         return False
-    return bool(event.video)
+    is_video_message = bool(event.video) or (
+        bool(event.document) and getattr(event.document, 'mime_type', '') and event.document.mime_type.startswith('video/')
+    )
+    return is_video_message
 
 @client.on(events.NewMessage(incoming=True, func=is_video_from_bot))
 async def handle_video(event: events.NewMessage.Event):
     try:
         caption = getattr(event.message, 'message', '') or ''
         user_id = int(caption)
-        video_id = event.video.file_unique_id
+        video_id = event.file.unique_id
         target_path = DOWNLOADS_DIR / f"{video_id}.mp4"
 
         logger.info("[TELETHON] Получено видео {video_id} от пользователя {user_id}", video_id=video_id, user_id=user_id)
