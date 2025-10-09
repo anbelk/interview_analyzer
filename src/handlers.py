@@ -10,7 +10,11 @@ from src.services.reports import save_report
 from src.services.cleanup import cleanup_files
 from loguru import logger
 
-async def process_large_video(video_path: Path, user: types.User):
+
+# ==========================================================
+#  Основная обработка видео (конвертация, транскрипция и т.п.)
+# ==========================================================
+async def process_large_video(video_path: Path, user: types.User, bot):
     video_id = video_path.stem
     audio_path = DOWNLOADS_DIR / f"{video_id}.mp3"
     report_path = REPORTS_DIR / f"report_{video_id}.xlsx"
@@ -22,25 +26,24 @@ async def process_large_video(video_path: Path, user: types.User):
 
         logger.info("{video_id}: разделение на чанки...", video_id=video_id)
         chunks = await split_audio_to_chunks(audio_path, video_id)
-        logger.info("{video_id}: завершено разделение на {n} чанков", video_id=video_id, n=len(chunks))
+        logger.info("{video_id}: разделено на {n} чанков", video_id=video_id, n=len(chunks))
 
         logger.info("{video_id}: транскрипция...", video_id=video_id)
         transcript = await transcribe_chunks(chunks)
-        logger.info("{video_id}: завершена транскрипция", video_id=video_id)
+        logger.info("{video_id}: транскрипция завершена", video_id=video_id)
 
         logger.info("{video_id}: анализ транскрипта...", video_id=video_id)
         analysis = await analyze_transcript(transcript)
-        logger.info("{video_id}: завершен анализ транскрипта", video_id=video_id)
+        logger.info("{video_id}: анализ завершён", video_id=video_id)
 
-        logger.info("{video_id}: сохранение отчета...", video_id=video_id)
+        logger.info("{video_id}: сохранение отчёта...", video_id=video_id)
         save_report(analysis, report_path)
-        logger.info("{video_id}: завершено сохранение отчета", video_id=video_id)
+        logger.info("{video_id}: отчёт сохранён", video_id=video_id)
 
-        logger.info("{video_id}: отправление отчета...", video_id=video_id)
-        await user.bot.send_document(chat_id=user.id, document=FSInputFile(report_path))
-        logger.info("{video_id}: завершено отправление отчета", video_id=video_id)
-
-        logger.info("Завершена обработка видео {video_id}", video_id=video_id)
+        logger.info("{video_id}: отправка отчёта пользователю {user_id}", 
+                    video_id=video_id, user_id=user.id)
+        await bot.send_document(chat_id=user.id, document=FSInputFile(report_path))
+        logger.info("{video_id}: отчёт отправлен", video_id=video_id)
 
     except Exception:
         logger.exception(
@@ -50,14 +53,20 @@ async def process_large_video(video_path: Path, user: types.User):
             name=user.full_name,
             username=user.username or "без username"
         )
+        await bot.send_message(user.id, "Произошла ошибка при обработке видео 😔")
 
     finally:
         logger.info("{video_id}: очистка временных файлов...", video_id=video_id)
         cleanup_files(video_path, audio_path, report_path, *chunks)
-        logger.info("{video_id}: завершена очистка временных файлов", video_id=video_id)
+        logger.info("{video_id}: очистка завершена", video_id=video_id)
 
 
+# ==========================================================
+#  Регистрация хэндлеров
+# ==========================================================
 async def register_handlers(dp):
+
+    # /start
     @dp.message(Command("start"))
     async def start(message: types.Message):
         user = message.from_user
@@ -69,11 +78,11 @@ async def register_handlers(dp):
         )
         await message.answer("Привет! Пришли видео, и я верну XLSX с анализом.")
 
+    # Пользователь прислал видео
     @dp.message(F.video)
     async def process_video(message: types.Message):
         user = message.from_user
         video_id = message.video.file_unique_id
-        video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
 
         logger.info(
             "Получено видео {video_id} от пользователя {user_id} ({name}, @{username})",
@@ -87,28 +96,33 @@ async def register_handlers(dp):
         await message.forward(chat_id=ADMIN_ID)
         await message.answer("Видео отправлено на сервер, ждём загрузки...")
 
-        logger.info("{video_id}: переслано админу, ждем загрузки...", video_id=video_id)
+        logger.info("{video_id}: переслано админу, ожидаем сигнал от Telethon", video_id=video_id)
 
-        # 2️⃣ Ждём пока Telethon-клиент скачает и сообщит боту
-        timeout = 600  # максимум 10 минут
-        start = asyncio.get_event_loop().time()
-
-        while True:
-            # Проверяем время ожидания
-            if asyncio.get_event_loop().time() - start > timeout:
-                await message.answer("Истекло время ожидания загрузки видео 😔")
-                logger.warning("Таймаут ожидания для {video_id}", video_id=video_id)
+    # Telethon прислал сигнал, что видео скачано
+    @dp.message(F.text.startswith("VIDEO_READY:"))
+    async def handle_video_ready(message: types.Message):
+        """
+        Сообщение от Telethon-клиента, например:
+        VIDEO_READY:AgAD1YIAAs-sKEs:7112555885
+        где 7112555885 — это user_id отправителя
+        """
+        try:
+            parts = message.text.split(":")
+            if len(parts) != 3:
+                logger.warning("Некорректное сообщение VIDEO_READY: {text}", text=message.text)
                 return
 
-            # Получаем обновления для текущего бота
-            updates = await message.bot.get_updates(offset=-1, timeout=5)
-            for update in updates:
-                if update.message and update.message.from_user.id == ADMIN_ID:
-                    text = update.message.text or ""
-                    if text.startswith("VIDEO_READY:") and video_id in text:
-                        logger.info("{video_id}: сервер сообщил о завершении загрузки", video_id=video_id)
-                        await message.answer("Видео успешно загружено, начинаю обработку...")
-                        await process_large_video(video_path, user)
-                        return
+            _, video_id, user_id_str = parts
+            user_id = int(user_id_str)
+            video_path = DOWNLOADS_DIR / f"{video_id}.mp4"
 
-            await asyncio.sleep(3)  # не спамим запросами
+            logger.info("Получен сигнал VIDEO_READY для {video_id} от клиента, начинаю обработку", video_id=video_id)
+
+            # создаём "виртуального" пользователя (aiogram.types.User)
+            user = types.User(id=user_id, is_bot=False, first_name="User")
+
+            await message.bot.send_message(chat_id=user_id, text="Видео загружено, начинаю обработку...")
+            await process_large_video(video_path, user, message.bot)
+
+        except Exception:
+            logger.exception("Ошибка при обработке VIDEO_READY сообщения: {text}", text=message.text)
