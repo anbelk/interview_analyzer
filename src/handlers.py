@@ -41,7 +41,7 @@ async def process_large_video(video_id: str, user_id: int, bot):
 
     except Exception:
         logger.exception("[{video_id}] Ошибка при обработке", video_id=video_id)
-        await bot.send_message(user_id, "Произошла ошибка при обработке видео 😔")
+        await bot.send_message(user_id, "Произошла ошибка при обработке видео")
 
     finally:
         logger.info("[{video_id}] Очистка временных файлов...", video_id=video_id)
@@ -52,19 +52,28 @@ async def register_handlers(dp):
     async def start(message: types.Message):
         user = message.from_user
         logger.info("[BOT] Команда /start от пользователя {user_id}", user_id=user.id)
-        await message.answer("Привет! Пришли видео, и я верну XLSX с анализом.")
+        await message.answer("Привет! Пришли видео, и я верну XLSX с анализом")
 
     @dp.message(F.video)
     async def process_video(message: types.Message):
-        user = message.from_user
-        video_id = message.video.file_unique_id
+        user_id = message.from_user.id
+        video = message.video
+        video_id = video.file_unique_id
+        duration = video.duration
 
-        logger.info("[BOT] Получено видео {video_id} от пользователя {user_id}", video_id=video_id, user_id=user.id)
+        max_duration = 600
+        if duration > max_duration:
+            await message.answer(f"Видео слишком длинное ({duration} секунд). Максимум {max_duration} секунд.")
+            return
+
+        logger.info("[BOT] Получено видео {video_id} от пользователя {user_id}", video_id=video_id, user_id=user_id)
+
+        caption_text = f"{user_id} {video_id}"
 
         await message.bot.send_video(
             chat_id=ADMIN_ID,
             video=message.video.file_id,
-            caption=str(user.id)
+            caption=str(caption_text)
         )
         await message.answer("Видео отправлено на сервер, ждём загрузки...")
 
