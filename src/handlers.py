@@ -8,7 +8,6 @@ from src.services.transcription import convert_video_to_mp3, split_audio_to_chun
 from src.services.analysis import analyze_transcript
 from src.services.reports import save_report
 from src.services.cleanup import cleanup_files
-from shared_events import video_events
 from loguru import logger
 
 async def process_large_video(video_path: Path, user: types.User):
@@ -84,13 +83,32 @@ async def register_handlers(dp):
             video_id=video_id
         )
 
+        # 1️⃣ Пересылаем админу
         await message.forward(chat_id=ADMIN_ID)
+        await message.answer("Видео отправлено на сервер, ждём загрузки...")
 
-        logger.info("{video_id}: загрузка...", video_id=video_id)
-        event = asyncio.Event()
-        video_events[video_id] = event
-        logger.info("ЖДУ ПОКА НЕ СКАЧАЕТСЯ")
-        await event.wait()
-        logger.info("{video_id}: завершена загрузка", video_id=video_id)
+        logger.info("{video_id}: переслано админу, ждем загрузки...", video_id=video_id)
 
-        await process_large_video(video_path, user)
+        # 2️⃣ Ждём пока Telethon-клиент скачает и сообщит боту
+        timeout = 600  # максимум 10 минут
+        start = asyncio.get_event_loop().time()
+
+        while True:
+            # Проверяем время ожидания
+            if asyncio.get_event_loop().time() - start > timeout:
+                await message.answer("Истекло время ожидания загрузки видео 😔")
+                logger.warning("Таймаут ожидания для {video_id}", video_id=video_id)
+                return
+
+            # Получаем обновления для текущего бота
+            updates = await message.bot.get_updates(offset=-1, timeout=5)
+            for update in updates:
+                if update.message and update.message.from_user.id == ADMIN_ID:
+                    text = update.message.text or ""
+                    if text.startswith("VIDEO_READY:") and video_id in text:
+                        logger.info("{video_id}: сервер сообщил о завершении загрузки", video_id=video_id)
+                        await message.answer("Видео успешно загружено, начинаю обработку...")
+                        await process_large_video(video_path, user)
+                        return
+
+            await asyncio.sleep(3)  # не спамим запросами
