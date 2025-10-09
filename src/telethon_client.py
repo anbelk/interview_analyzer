@@ -2,6 +2,7 @@ import asyncio
 from telethon import TelegramClient, events
 from telethon.tl.types import DocumentAttributeVideo
 from src.config import BOT_ID, TG_API_ID, TG_API_HASH, DOWNLOADS_DIR
+from src.config import BOT_TOKEN
 from loguru import logger
 
 # 👇 Telethon клиент работает от лица администратора (твоего аккаунта)
@@ -59,5 +60,5 @@ async def handle_forwarded_video(event):
 
 async def main():
     print("Telethon запущен как пользователь (админский клиент)")
-    await client.start()
+    await client.start(bot_token=BOT_TOKEN)
     await client.run_until_disconnected()
