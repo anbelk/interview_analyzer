@@ -23,7 +23,11 @@ async def handle_video(event: events.NewMessage.Event):
         media = event.video or event.document
         caption = getattr(event.message, 'message', '') or ''
         user_id = int(caption)
-        video_id = getattr(media, 'file_unique_id')
+        
+        if event.video:
+            video_id = event.video.file_unique_id
+        elif event.document:
+            video_id = event.document.id
         target_path = DOWNLOADS_DIR / f"{video_id}.mp4"
 
         logger.info("[TELETHON] Получено видео {video_id} от пользователя {user_id}", video_id=video_id, user_id=user_id)
