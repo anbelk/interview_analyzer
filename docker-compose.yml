@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    command:
+      - vllm
+      - serve
+      - Qwen/Qwen3-8B-FP8
+      - --host
+      - 0.0.0.0
+      - --max-model-len
+      - "8192"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    restart: always
+
+  bot:
+    build:
+      context: ./app
+    command: python src/main.py
+    depends_on:
+      - vllm
+    volumes:
+      - ./downloads:/app/downloads
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+      - ./app/admin_session.session:/app/admin_session.session
+    env_file:
+      - .env
+    restart: always

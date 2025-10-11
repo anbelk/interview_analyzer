@@ -1,5 +1,6 @@
 import json
 from openai import AsyncOpenAI
+from src.config import VLLM_API_BASE, VLLM_MODEL_NAME
 
 PROMPT_TEMPLATE = """
 Ты получаешь транскрипт технического интервью программиста.
@@ -36,15 +37,28 @@ PROMPT_TEMPLATE = """
 3. Если не удаётся однозначно определить тему — используй ближайшую по смыслу.
 """
 
-
-client = AsyncOpenAI()
+client = AsyncOpenAI(
+    base_url=VLLM_API_BASE,
+    api_key="not-needed"
+)
 
 async def analyze_transcript(transcript: str):
     prompt = PROMPT_TEMPLATE + f"\nТранскрипт:\n{transcript}"
+    
+    messages = [
+        {"role": "system", "content": "Вы — эксперт-аналитик. Ваша задача — вернуть корректный JSON-объект."},
+        {"role": "user", "content": prompt}
+    ]
+
     resp = await client.chat.completions.create(
-        model="gpt-4.1",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2
+        model=VLLM_MODEL_NAME,
+        messages=messages,
+        temperature=0.1,
+        max_tokens=4096
     )
     text = resp.choices[0].message.content.strip()
+
+    if text.startswith("```json"):
+        text = text[7:-3].strip()
+
     return json.loads(text)

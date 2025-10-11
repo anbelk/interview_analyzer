@@ -6,3 +6,7 @@ python-dotenv
 pytest
 pytest-asyncio
 loguru
+
+faster-whisper
+torch
+torchaudio

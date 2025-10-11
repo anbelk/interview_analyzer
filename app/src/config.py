@@ -13,6 +13,9 @@ TG_API_HASH = os.getenv("TG_API_HASH")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://localhost:8000/v1")
+VLLM_MODEL_NAME = os.getenv("VLLM_MODEL_NAME")
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 REPORTS_DIR = BASE_DIR / "reports"
