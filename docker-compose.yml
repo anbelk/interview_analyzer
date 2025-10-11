@@ -11,6 +11,9 @@ services:
       - 0.0.0.0
       - --max-model-len
       - "8192"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=3
+      - VLLM_LOGGING_LEVEL=DEBUG
     deploy:
       resources:
         reservations:
