@@ -32,7 +32,7 @@ services:
       - ./downloads:/app/downloads
       - ./reports:/app/reports
       - ./logs:/app/logs
-      - ./app/admin_session.session:/app/admin_session.session
+      - ./sessions:/app/sessions
     env_file:
       - .env
     restart: always

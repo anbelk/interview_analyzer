@@ -7,7 +7,7 @@ from src.handlers import process_large_video
 from aiogram import Bot
 from loguru import logger
 
-client = TelegramClient("admin_session", TG_API_ID, TG_API_HASH)
+client = TelegramClient("sessions/admin_session", TG_API_ID, TG_API_HASH)
 
 def is_video_from_bot(event: events.NewMessage.Event) -> bool:
     if event.sender_id != BOT_ID:
